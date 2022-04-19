@@ -7,20 +7,24 @@
 
 #}
 
-{% macro clean_stale_models(database=target.database, schema=target.schema, days=7, dry_run=True) %}
+{% macro clean_stale_models(database=target.dataset, schema=target.schema, days=7, dry_run=True) %}
     
     {% set get_drop_commands_query %}
-        select
-            case 
-                when table_type = 'VIEW'
-                    then table_type
-                else 
-                    'TABLE'
-            end as drop_type, 
-            'DROP ' || drop_type || ' {{ database | upper }}.' || table_schema || '.' || table_name || ';'
-        from {{ database }}.information_schema.tables 
-        where table_schema = upper('{{ schema }}')
-        and last_altered <= current_date - {{ days }} 
+        select  drop_type, 
+                'DROP ' || drop_type || ' {{ database | upper }}.' || table_schema || '.' || table_name || ';'
+        from (
+            select
+                case 
+                    when table_type = 'VIEW'
+                        then table_type
+                    else 
+                        'TABLE'
+                end as drop_type, 
+                *
+            from {{ database }}.INFORMATION_SCHEMA.TABLES 
+            where table_schema = '{{ schema }}'
+            and creation_time <= TIMESTAMP_ADD(TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY), INTERVAL -{{ days }} DAY)
+        )
     {% endset %}
 
     {{ log('\nGenerating cleanup queries...\n', info=True) }}
